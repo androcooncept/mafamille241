@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Administration — Gabon Breaking News</title>
+    <meta name="robots" content="noindex">
+    <link rel="icon" href="images/logo.jpg">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header id="entete"></header>
+    <main>
+        <div class="container">
+            <h2 class="section-title">Rédaction — publier un article</h2>
+            <div class="demo-note">
+                Comment publier : 1) rédigez vos articles ici (ils sont gardés dans ce navigateur et visibles en aperçu sur le site) ;
+                2) cliquez sur « Télécharger articles.js » ; 3) remplacez le fichier <code>js/articles.js</code> du site par celui téléchargé.
+                Tant que l'étape 3 n'est pas faite, les visiteurs ne voient pas vos changements.
+            </div>
+            <div class="admin-grid">
+                <form class="form" id="formulaire">
+                    <input type="hidden" id="f-id">
+                    <label for="f-titre">Titre *</label>
+                    <input id="f-titre" required maxlength="160">
+                    <label for="f-chapo">Chapô (résumé en une ou deux phrases) *</label>
+                    <input id="f-chapo" required maxlength="300">
+                    <label for="f-categorie">Rubrique</label>
+                    <select id="f-categorie"></select>
+                    <label for="f-contenu">Texte de l'article *</label>
+                    <textarea id="f-contenu" required></textarea>
+                    <p class="help">Laissez une ligne vide entre les paragraphes. Une ligne qui commence par « ## » devient un intertitre.</p>
+                    <label for="f-image">Image (adresse web ou chemin images/nom.jpg)</label>
+                    <input id="f-image" placeholder="https://… ou images/photo.jpg">
+                    <label for="f-legende">Légende / crédit photo</label>
+                    <input id="f-legende" placeholder="ex. Le front de mer de Libreville. Crédit : GBN">
+                    <label for="f-auteur">Auteur</label>
+                    <input id="f-auteur" value="La rédaction">
+                    <label for="f-date">Date et heure</label>
+                    <input id="f-date" type="datetime-local">
+                    <label class="check"><input type="checkbox" id="f-urgent"> Urgent (apparaît dans « Dernière minute »)</label>
+                    <label class="check"><input type="checkbox" id="f-une"> Mettre à la une</label>
+                    <div class="actions">
+                        <button class="btn btn-red" type="submit" id="f-valider">Ajouter l'article</button>
+                        <button class="btn btn-light" type="button" id="f-annuler">Vider le formulaire</button>
+                    </div>
+                </form>
+
+                <div class="form">
+                    <div class="actions" style="margin-top:0">
+                        <button class="btn btn-dark" id="telecharger">Télécharger articles.js</button>
+                        <a class="btn btn-light" href="index.html" target="_blank">Voir l'aperçu</a>
+                        <button class="btn btn-light" id="sans-exemples">Supprimer les exemples</button>
+                        <button class="btn btn-light" id="reinitialiser">Annuler mes changements</button>
+                    </div>
+                    <div class="admin-list" id="liste"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <footer id="pied"></footer>
+
+    <script src="js/articles.js"></script>
+    <script src="js/app.js"></script>
+    <script>
+        const $ = id => document.getElementById(id);
+        let articles = [...ARTICLES];
+
+        function sauver() {
+            ecrireBrouillon(articles);
+            afficherListe();
+        }
+
+        function slug(texte) {
+            const base = texte.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+                .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "article";
+            let id = base, n = 2;
+            while (articles.some(a => a.id === id)) id = `${base}-${n++}`;
+            return id;
+        }
+
+        function maintenantLocal() {
+            const d = new Date();
+            d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+            return d.toISOString().slice(0, 16);
+        }
+
+        function viderFormulaire() {
+            $("formulaire").reset();
+            $("f-id").value = "";
+            $("f-date").value = maintenantLocal();
+            $("f-valider").textContent = "Ajouter l'article";
+        }
+
+        function afficherListe() {
+            const tries = [...articles].sort((a, b) => new Date(b.date) - new Date(a.date));
+            $("liste").innerHTML = `<h4 style="margin:12px 0 4px">${tries.length} article(s)</h4>` + tries.map(a => `
+                <div class="item">
+                    <span>${a.urgent ? "🔴 " : ""}${a.une ? "⭐ " : ""}<strong>${esc(a.titre)}</strong><br>
+                        <span class="meta">${esc(categorie(a.categorie).nom)} · ${esc(dateLisible(a.date))}${a.demo ? " · exemple" : ""}</span></span>
+                    <span style="display:flex;gap:6px">
+                        <button class="btn btn-light" data-modifier="${esc(a.id)}">Modifier</button>
+                        <button class="btn btn-light" data-supprimer="${esc(a.id)}">Supprimer</button>
+                    </span>
+                </div>`).join("");
+        }
+
+        $("f-categorie").innerHTML = CATEGORIES.map(c => `<option value="${c.id}">${esc((ZONES[c.zone] && c.zone !== c.id ? ZONES[c.zone] + " — " : "") + c.nom)}</option>`).join("");
+        viderFormulaire();
+        afficherListe();
+        rendreEntete();
+        rendrePied();
+
+        $("formulaire").addEventListener("submit", e => {
+            e.preventDefault();
+            const existant = $("f-id").value;
+            const article = {
+                id: existant || slug($("f-titre").value),
+                titre: $("f-titre").value.trim(),
+                chapo: $("f-chapo").value.trim(),
+                contenu: $("f-contenu").value.trim(),
+                categorie: $("f-categorie").value,
+                date: $("f-date").value || maintenantLocal(),
+                auteur: $("f-auteur").value.trim() || "La rédaction",
+                image: $("f-image").value.trim(),
+                legende: $("f-legende").value.trim(),
+                urgent: $("f-urgent").checked,
+                une: $("f-une").checked
+            };
+            if (article.une) articles.forEach(a => { a.une = false; });
+            articles = existant ? articles.map(a => a.id === existant ? article : a) : [article, ...articles];
+            sauver();
+            viderFormulaire();
+            rendreEntete();
+        });
+
+        $("f-annuler").addEventListener("click", viderFormulaire);
+
+        $("liste").addEventListener("click", e => {
+            const mod = e.target.dataset.modifier, sup = e.target.dataset.supprimer;
+            if (mod) {
+                const a = articles.find(x => x.id === mod);
+                $("f-id").value = a.id;
+                $("f-titre").value = a.titre;
+                $("f-chapo").value = a.chapo;
+                $("f-contenu").value = a.contenu;
+                $("f-categorie").value = a.categorie;
+                $("f-image").value = a.image || "";
+                $("f-legende").value = a.legende || "";
+                $("f-auteur").value = a.auteur || "";
+                $("f-date").value = (a.date || "").slice(0, 16);
+                $("f-urgent").checked = !!a.urgent;
+                $("f-une").checked = !!a.une;
+                $("f-valider").textContent = "Enregistrer les modifications";
+                window.scrollTo({ top: 0, behavior: "smooth" });
+            }
+            if (sup && confirm("Supprimer cet article ?")) {
+                articles = articles.filter(a => a.id !== sup);
+                sauver();
+            }
+        });
+
+        $("sans-exemples").addEventListener("click", () => {
+            if (confirm("Supprimer tous les articles d'exemple ?")) {
+                articles = articles.filter(a => !a.demo);
+                sauver();
+            }
+        });
+
+        $("reinitialiser").addEventListener("click", () => {
+            if (confirm("Revenir aux articles actuellement publiés ? Vos changements non téléchargés seront perdus.")) {
+                effacerBrouillon();
+                location.reload();
+            }
+        });
+
+        $("telecharger").addEventListener("click", () => {
+            const contenu = `/*
+ * Gabon Breaking News — base des articles et réglages du site.
+ * Fichier généré depuis admin.html le ${new Date().toLocaleString("fr-FR")}.
+ */
+
+const SITE = ${JSON.stringify(SITE, null, 4)};
+
+const CATEGORIES = ${JSON.stringify(CATEGORIES, null, 4)};
+
+const ARTICLES = ${JSON.stringify(articles, null, 4)};
+`;
+            const lien = document.createElement("a");
+            lien.href = URL.createObjectURL(new Blob([contenu], { type: "text/javascript" }));
+            lien.download = "articles.js";
+            lien.click();
+            URL.revokeObjectURL(lien.href);
+        });
+    </script>
+</body>
+</html>
